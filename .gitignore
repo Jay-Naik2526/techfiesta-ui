@@ -1,0 +1,14 @@
+node_modules
+dist
+.DS_Store
+
+# local sharing tunnel
+.share-*
+.share-url
+
+# raw source footage and the old prototype (not part of the site)
+_assets/
+_prototype/
+
+# local tool config
+.claude/

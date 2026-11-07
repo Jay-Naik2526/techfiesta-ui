@@ -1,0 +1,38 @@
+/* Paradox diagrams (live SVG) */
+.art { width: 100%; height: 100%; display: grid; place-items: center; color: #0b0d1c; }
+.art-svg { width: 100%; height: 100%; overflow: visible; }
+.art-svg text { font: 500 9.5px var(--mono); letter-spacing: 0.06em; fill: currentColor; stroke: none; text-transform: uppercase; }
+.art-svg .acc { fill: var(--acc); stroke: var(--acc); }
+.art-svg .fill-acc { fill: var(--acc); stroke: none; }
+.art-svg text.on-acc { fill: #0b0d1c; }
+.plank { fill: transparent; animation: plank 8s steps(1, end) infinite; animation-delay: calc(var(--i) * 1.15s); }
+@keyframes plank { 0% { fill: transparent; } 12%, 100% { fill: var(--acc); } }
+.cell { fill: transparent; animation: cell calc(var(--n) * 1.4s) steps(1, end) infinite; animation-delay: calc(var(--i) * 1.4s); }
+@keyframes cell { 0% { fill: var(--acc); } 15%, 100% { fill: transparent; } }
+.arrow-z { animation: zeno 7s infinite; }
+@keyframes zeno {
+  0% { transform: translateX(0); opacity: 1; animation-timing-function: var(--ease-out); }
+  24% { transform: translateX(114px); animation-timing-function: var(--ease-out); }
+  42% { transform: translateX(174px); animation-timing-function: var(--ease-out); }
+  57% { transform: translateX(204px); animation-timing-function: var(--ease-out); }
+  70% { transform: translateX(219px); animation-timing-function: var(--ease-out); }
+  82% { transform: translateX(224px); opacity: 1; }
+  94% { transform: translateX(226px); opacity: 1; }
+  100% { transform: translateX(226px); opacity: 0; }
+}
+.flag { transform-origin: 0 50%; animation: wave 3.4s var(--ease-in-out) infinite alternate; }
+@keyframes wave { from { transform: skewY(-3deg); } to { transform: skewY(3deg) scaleX(0.96); } }
+.wheel { animation: wheel 2.7s steps(9) infinite; }
+@keyframes wheel { to { transform: rotate(360deg); } }
+.tower-block { transform-box: fill-box; animation: slide 6s var(--ease-in-out) infinite alternate; animation-delay: calc(var(--i) * 0.25s); }
+@keyframes slide { to { transform: translateX(var(--dx)); } }
+.dot-a { animation: dotA 6s var(--ease-in-out) infinite alternate; }
+.dot-b { animation: dotA 4s var(--ease-in-out) infinite alternate; }
+@keyframes dotA { to { transform: translate(190px, 0); } }
+.dash-run { stroke-dasharray: 5 7; animation: dash 3.5s linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -96; } }
+.flicker { animation: flick 2.6s steps(1, end) infinite; }
+@keyframes flick { 0%, 100% { opacity: 1; } 22% { opacity: 0.15; } 48% { opacity: 1; } 71% { opacity: 0.1; } }
+@media (prefers-reduced-motion: reduce) {
+  .plank, .cell, .arrow-z, .flag, .wheel, .tower-block, .dot-a, .dot-b, .dash-run, .flicker { animation: none; }
+}
