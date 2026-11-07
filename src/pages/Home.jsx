@@ -55,7 +55,7 @@ export default function Home({ ready }) {
   /* hold to take the triangle apart */
   useEffect(() => {
     const down = (e) => {
-      if (!world || world.sCur > 0.6 || e.target.closest("a,button,[data-ui]")) return;
+      if (!world || world.sCur > 0.6 || e.target.closest?.("a,button,[data-ui]")) return;
       world.breakApart(true); setHint("Three ordinary beams. Let go.");
     };
     const up = () => { if (world && world.broken > 0.01) { world.breakApart(false); setHint("Watch them climb forever · Hold to take it apart"); } };

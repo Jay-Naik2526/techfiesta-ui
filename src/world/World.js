@@ -147,9 +147,10 @@ export class World {
       ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
       comp.addPass(ao); this.ao = ao;
     }
-    comp.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.65, 0.55, 0.93));
+    comp.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / (this.small ? 4 : 2), innerHeight / (this.small ? 4 : 2)), 0.65, 0.55, 0.93));
     comp.addPass(new OutputPass());
     this.finish = new ShaderPass({
+      defines: { TAPS: this.small ? 3 : 7 },   // the warp blur: fewer taps on phones
       uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uAb: { value: 0.00025 }, uRes: { value: new THREE.Vector2(innerWidth, innerHeight) }, uFlash: { value: 0 }, uWarp: { value: 0 } },
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
       fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime; uniform float uAb; uniform vec2 uRes; uniform float uFlash; uniform float uWarp; varying vec2 vUv;
@@ -159,7 +160,7 @@ export class World {
           vec2 uv=0.5+c*(1.0-uWarp*0.22*d*d);
           vec2 o=c*(uAb+uFlash*0.008+uWarp*0.004)*(1.0+d*4.0);
           vec3 col=vec3(0.0); float tot=0.0;
-          for(int i=0;i<7;i++){ float k=float(i)/6.0; float w=1.0-k*0.6; col+=tap(0.5+(uv-0.5)*(1.0-k*uWarp*0.07), o)*w; tot+=w; }
+          for(int i=0;i<TAPS;i++){ float k=float(i)/float(TAPS-1); float w=1.0-k*0.6; col+=tap(0.5+(uv-0.5)*(1.0-k*uWarp*0.07), o)*w; tot+=w; }
           col/=tot;
           col=mix(col, col*vec3(0.92,0.95,1.08)+vec3(0.006,0.004,0.02), 0.6);      // cool grade, indigo shadows
           col*=mix(1.0, 0.5, smoothstep(0.32, 0.95, d));
@@ -559,7 +560,23 @@ export class World {
     let i = 0; while (i < K.length - 2 && s > K[i + 1][0]) i++;
     const [s0, ...a] = K[i], [s1, ...b] = K[i + 1], k = smooth(clamp((s - s0) / (s1 - s0)));
     const f = a.map((x, j) => x + (b[j] - x) * k);
-    if (innerWidth < innerHeight) { f[1] *= 0.3; f[2] = Math.min(f[2], -1.8); f[0] += 1.5; }   // portrait: keep him in the narrow frame
+    if (innerWidth < innerHeight) {
+      // portrait (phones): place him by screen fraction (x right, y up; ±1 = screen edge) so he lands in the
+      // clear space each section leaves: under the stair, above the tunnel headline, beside the painting
+      const P = [
+        [0, 15, 0.58, -0.45],             // below the stair, right of the hint text
+        [STOP.trick, 13, 0.55, -0.45],
+        [STOP.descent, 8.5, 0.15, 0.3],   // above "11 rooms…"
+        [STOP.ex0, 10, 0.74, 0.16],       // right edge, beside the painting, above the room panel
+        [STOP.bottom, 9, 0.2, 0.62],      // over the big numbers' top margin
+        [STOP.top, 10, 0.45, -0.5]        // under the closing call to action
+      ];
+      let j = 0; while (j < P.length - 2 && s > P[j + 1][0]) j++;
+      const [p0, ...pa] = P[j], [p1, ...pb] = P[j + 1], kk = smooth(clamp((s - p0) / (p1 - p0)));
+      const [D, fx, fy] = pa.map((x, n) => x + (pb[n] - x) * kk);
+      const tanH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)), asp = innerWidth / innerHeight;
+      return [D, fx * D * tanH * asp, fy * D * tanH];
+    }
     return f;
   }
   _astroTick(t, dt, cam, fwd, right, up) {
@@ -640,7 +657,7 @@ export class World {
     const { P, R, pts, prev } = Te, ap = this.ap;
     // ends, in camera space (right, up, ahead): his backpack, and a point just below and behind your view
     const a = ap.r.clone().add(V(0, 0.15 * this.astro.scale.x / 0.82, -0.3));
-    const b = V(0.9, -3.4, 0.4);
+    const b = innerWidth < innerHeight ? V(1.1, -0.9, 0.5) : V(0.9, -3.4, 0.4);   // phones: exit the side, not down through the text
     if (!Te.seeded) { for (let i = 0; i < P; i++) { const k = i / (P - 1); pts[i].lerpVectors(a, b, k).y -= Math.sin(k * Math.PI) * 1.2; prev[i].copy(pts[i]); } Te.seeded = true; }
     const len = a.distanceTo(b) * 1.22 / (P - 1);                      // ~20% slack: it sags and swings
     const h = Math.min(dt, 1 / 30), h2 = h * h;
@@ -916,6 +933,11 @@ export class World {
     const deep = this.mode.type === "focus" || (this.mode.type === "ambient" && this.mode.place === "gallery") ? 1
       : this.mode.type === "journey" ? clamp(this.sCur - STOP.descent) * clamp(STOP.bottom - this.sCur) : 0;
     let fov = this.fovBase() + deep * (innerWidth < innerHeight ? 4 : 10);
+    // portrait: widen the lens at the stair so the whole loop fits across a phone (same camera position, so the illusion holds)
+    if (innerWidth < innerHeight && heroW > 0) {
+      const heroFov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(14.5)) / (innerWidth / innerHeight)));
+      fov += (Math.min(heroFov, 72) - fov) * heroW;
+    }
     if (this.blend < 1 && this.from) fov = this.from.fov + (fov - this.from.fov) * smooth(this.blend) + Math.sin(Math.PI * this.blend) * 14; // lens punches wide mid-flight
     if (Math.abs(fov - cam.fov) > 0.001) { cam.fov = fov; cam.updateProjectionMatrix(); }
     this.scene.fog.density = fog;

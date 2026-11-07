@@ -26,7 +26,7 @@ export default function Rooms() {
 
   useEffect(() => {
     const key = (ev) => {
-      if (ev.target.closest("input,textarea,select")) return;
+      if (ev.target.closest?.("input,textarea,select")) return;
       const sec = steps.current[0]?.parentElement; if (!sec) return;
       const r = sec.getBoundingClientRect(); if (r.top > 0 || r.bottom < innerHeight) return;   // only while pinned
       const d = ev.key === "ArrowDown" || ev.key === "ArrowRight" ? 1 : ev.key === "ArrowUp" || ev.key === "ArrowLeft" ? -1 : 0;

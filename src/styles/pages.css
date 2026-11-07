@@ -285,6 +285,15 @@
 
 /* ═════════ small screens ═════════ */
 @media (max-width: 899px) {
+  /* room for the bottom tab bar on everything anchored to the bottom of the screen */
+  :root { --tb: calc(max(10px, env(safe-area-inset-bottom)) + 84px); }
+  .hero__ui { padding: 70px 0 var(--tb); }
+  .hero__meta { font-size: 10px; }
+  .hero__bottom { gap: 8px; }
+  .s-dive { padding-bottom: calc(var(--tb) + 4svh); }
+  .s-end { padding-bottom: calc(var(--tb) + 6svh); }
+  .s-ex, .s-ex.is-right { padding-bottom: calc(var(--tb) + 2svh) !important; }
+  .ask-btn, .ask { display: none !important; }            /* the tab bar's Help covers it; the bubble only hid content */
   .hero__bottom { flex-direction: column; align-items: flex-start; }
   .hero__right { justify-items: start; }
   .cue { display: none; }
@@ -454,7 +463,7 @@
 @media (hover: hover) and (pointer: fine) { .rooms__index button:hover { color: var(--paper); } }
 .rooms__step { height: 95svh; }
 @media (max-width: 899px) {
-  .rooms__panel { inset: auto 0 0 0; width: auto; grid-template-rows: auto auto auto; padding: 22px var(--gut) 160px; background: linear-gradient(0deg, rgba(5, 6, 13, 0.96) 60%, rgba(5, 6, 13, 0)); }
+  .rooms__panel { inset: auto 0 0 0; width: auto; grid-template-rows: auto auto auto; padding: 22px var(--gut) calc(var(--tb) + 14px); background: linear-gradient(0deg, rgba(5, 6, 13, 0.96) 60%, rgba(5, 6, 13, 0)); }
   .rooms__index { display: none; }
   .rooms__title { font-size: 2.8rem; }
 }
