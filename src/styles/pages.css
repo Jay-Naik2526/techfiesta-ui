@@ -494,3 +494,10 @@
 .filmscroll__hint { position: absolute; left: 50%; bottom: calc(9svh + 22px); translate: -50% 0; display: inline-flex; align-items: center; gap: 10px; color: rgba(255, 255, 255, 0.8); }
 .filmscroll__hint i { width: 1px; height: 26px; background: linear-gradient(#fff, transparent); animation: hintdrop 1.6s var(--ease-in-out) infinite; }
 @keyframes hintdrop { 0% { transform: scaleY(0); transform-origin: top; } 50% { transform: scaleY(1); transform-origin: top; } 51% { transform-origin: bottom; } 100% { transform: scaleY(0); transform-origin: bottom; } }
+
+/* horizon theme: the disk is bright, so headlines that sit over it get a soft dark backing */
+[data-theme="horizon"] .s-bottom::before, [data-theme="horizon"] .s-dive::before { content: ""; position: absolute; inset: -10% auto -10% calc(var(--gut) * -1); width: min(78vw, 980px); background: radial-gradient(ellipse at 30% 50%, rgba(3, 4, 10, 0.78) 0%, rgba(3, 4, 10, 0.5) 45%, transparent 72%); pointer-events: none; z-index: -1; }
+[data-theme="horizon"] .bottom__text, [data-theme="horizon"] .dive__title { text-shadow: 0 2px 30px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.6); }
+
+/* the stretched headline at the horizon must not widen the page (that would drag every fixed element sideways on phones) */
+[data-theme="horizon"] .home { overflow-x: clip; }

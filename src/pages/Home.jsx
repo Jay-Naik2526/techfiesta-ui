@@ -1,3 +1,4 @@
+import { THEME } from "../lib/theme.js";
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -20,7 +21,7 @@ export default function Home({ ready }) {
   useEffect(() => {
     if (!world) return;
     let anchors = [];
-    const measure = () => {
+    const measure = () => { if (!root.current) return;
       anchors = [...root.current.querySelectorAll("[data-stop]")].map((el) => ({
         stop: +el.dataset.stop,
         y: Math.max(0, el.getBoundingClientRect().top + scrollY + el.offsetHeight / 2 - innerHeight / 2)
@@ -77,6 +78,9 @@ export default function Home({ ready }) {
       if (!reduceMotion) {
         root.current.querySelectorAll(".s-ex").forEach((s) => float(s.querySelector(".placard"), s));
         float(".dive__title", ".s-dive");
+        // horizon theme: at the horizon the headline itself is pulled in — stretched thin and dragged towards the hole
+        if (THEME === "horizon") gsap.to(".dive__title > *", { scaleY: 3.6, scaleX: 0.16, xPercent: 150, yPercent: 70, skewY: -20, filter: "blur(5px)", opacity: 0, transformOrigin: "100% 50%", ease: "power2.in", stagger: 0.14,
+          scrollTrigger: { trigger: ".s-dive", start: "bottom 82%", end: "bottom 22%", scrub: true } });
         float(".bottom__text", ".s-bottom");
         gsap.fromTo(".s-hero .hero__ui", { opacity: 1 }, { opacity: 0, ease: "none", scrollTrigger: { trigger: ".s-hero", start: "top top", end: "bottom 40%", scrub: true } });
         gsap.from(".s-hero .hero__ui > *", { y: 24, opacity: 0, duration: 1.1, ease: "expo.out", stagger: 0.1, delay: 1.6 });
@@ -134,7 +138,7 @@ export default function Home({ ready }) {
 
       {/* into the tesseract */}
       <section className="s s-dive" data-stop={STOP.descent}>
-        <p className="mono eyebrow">Into the tesseract</p>
+        <p className="mono eyebrow">{THEME === "horizon" ? "Towards the horizon" : "Into the tesseract"}</p>
         <h2 className="dive__title"><span>{EVENTS.length} rooms.</span><span>Every one of them</span><em>is the same room.</em></h2>
       </section>
 
@@ -143,7 +147,7 @@ export default function Home({ ready }) {
 
       {/* bottom */}
       <section className="s s-bottom" data-stop={STOP.bottom}>
-        <p className="mono eyebrow">The far wall of the tesseract</p>
+        <p className="mono eyebrow">{THEME === "horizon" ? "The event horizon" : "The far wall of the tesseract"}</p>
         <p className="bottom__text">
           <span className="n" data-count="3">0</span> days. <span className="n" data-count="15">0</span> events. <span className="n" data-count="7">0</span> clubs. <span className="n" data-count="24">0</span> hours of a hackathon that never sleeps. <span className="n" data-count="1">0</span> name, <em>changed.</em>
         </p>

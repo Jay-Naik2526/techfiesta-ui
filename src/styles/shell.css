@@ -91,11 +91,9 @@
 
 /* ═════════ curtain ═════════ */
 .curtain { position: fixed; inset: 0; z-index: 450; visibility: hidden; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
-.shard { position: absolute; left: -10%; right: -10%; height: 42%; transform: translateX(-115%) skewY(-7deg); will-change: transform; }
-.shard:nth-child(1) { top: -8%; background: var(--acc); }
-.shard:nth-child(2) { top: 29%; background: var(--paper); }
-.shard:nth-child(3) { top: 66%; height: 46%; background: var(--ink-3); }
-.curtain__inner { position: relative; z-index: 2; color: #fff; mix-blend-mode: difference; }
+.fold { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--c), 1fr); grid-template-rows: repeat(var(--r), 1fr); perspective: 1600px; }
+.fold__cell { background: linear-gradient(160deg, #0b0d24 0%, #05060d 60%); box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.16), inset 0 0 40px rgba(77, 163, 255, 0.05); opacity: 0; backface-visibility: hidden; will-change: transform, opacity; }
+.curtain__inner { position: relative; z-index: 2; color: var(--paper); }
 .curtain__inner { display: grid; justify-items: center; gap: 12px; text-align: center; }
 .curtain__mask { overflow: hidden; display: block; }
 .curtain__mask > span { display: block; }
@@ -155,3 +153,23 @@
 .film__t .mono { opacity: 0.75; }
 .film__skip { position: absolute; right: var(--gut); bottom: calc(11vh + 18px); z-index: 3; color: rgba(255, 255, 255, 0.75); padding: 8px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.35); }
 @media (hover: hover) and (pointer: fine) { .film__skip:hover { color: #fff; } }
+
+/* ═════════ theme switch (tesseract ⇄ black hole) ═════════ */
+.nav__theme { display: inline-flex; align-items: center; gap: 9px; height: 38px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 999px; transition: border-color 0.25s ease, background 0.25s ease; }
+@media (hover: hover) and (pointer: fine) { .nav__theme:hover { border-color: var(--paper); background: rgba(226, 228, 255, 0.06); } }
+.nav__theme-ico { position: relative; width: 14px; height: 14px; flex: none; }
+.nav__theme-ico.is-horizon { border-radius: 50%; background: #000; box-shadow: 0 0 0 1.5px #dfe6ff, 0 0 10px 2px rgba(120, 150, 255, 0.9); }
+.nav__theme-ico.is-horizon::after { content: ""; position: absolute; left: -5px; right: -5px; top: 6px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, #cfe0ff, transparent); }
+.nav__theme-ico.is-tesseract { border: 1.5px solid var(--acc); }
+.nav__theme-ico.is-tesseract::after { content: ""; position: absolute; inset: 2.5px; border: 1.5px solid var(--cyan, #39e1ff); }
+@media (max-width: 899px) { .nav__theme { padding: 0 11px; } }
+.nav__sound { white-space: nowrap; }
+@media (max-width: 1240px) { .nav__theme > span:last-child { display: none; } .nav__theme { padding: 0 11px; } }
+
+/* horizon theme: how much slower your clock runs than one far from the hole */
+.dilation { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 120; display: flex; gap: 9px; align-items: baseline; white-space: nowrap; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line-2); background: rgba(5, 6, 13, 0.6); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); color: var(--muted); font-size: 10.5px; opacity: 0; transition: opacity 0.6s ease; pointer-events: none; }
+.dilation.is-in { opacity: 1; }
+.dilation b { color: #ffd9a0; font-weight: 500; font-variant-numeric: tabular-nums; min-width: 13ch; text-align: center; }
+.dilation i { font-style: normal; opacity: 0.6; }
+@media (max-width: 899px) { .dilation { top: 62px; font-size: 9px; gap: 6px; padding: 6px 10px; } .dilation b { min-width: 11ch; } }
+[data-theme="horizon"] .cursor:not(.is-hover):not(.is-label) { width: 4px; height: 4px; margin: -2px 0 0 -2px; }

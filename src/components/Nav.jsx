@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { TLink, world } from "../lib/app.jsx";
 import { sound } from "../lib/sound.js";
 import { FEST } from "../data/fest.js";
+import { OTHER, THEMES, switchTheme } from "../lib/theme.js";
 
 const LINKS = [["/events", "Exhibits"], ["/schedule", "Schedule"], ["/about", "About"], ["/contact", "Contact"]];
 
@@ -23,6 +24,9 @@ export default function Nav({ ready, menuOpen, onMenu }) {
         ))}
       </nav>
       <div className="nav__right">
+        <button className="nav__theme mono" onClick={() => switchTheme()} aria-label={`Switch to the ${THEMES[OTHER]} theme`} title={`Switch to the ${THEMES[OTHER]} theme`} data-cursor="Switch">
+          <span className={`nav__theme-ico is-${OTHER}`} aria-hidden="true" /><span className="hide-sm">{THEMES[OTHER]}</span>
+        </button>
         <button className={`nav__sound mono ${snd ? "is-on" : ""}`} onClick={() => { const on = sound.toggle(); world?.setFilmSound(on); setSnd(on); }} aria-pressed={snd} aria-label={snd ? "Turn sound off" : "Turn sound on"}>
           <span className="bars" aria-hidden="true"><i /><i /><i /><i /></span><span className="hide-sm">{snd ? "Sound on" : "Sound off"}</span>
         </button>

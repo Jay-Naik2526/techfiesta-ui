@@ -11,7 +11,10 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { createAstronaut } from "./Astronaut.js";
+import { createHypercube } from "./Hypercube.js";
+import { createSpace } from "./Space.js";
+import { THEME } from "../lib/theme.js";
 import { sound } from "../lib/sound.js";
 import gsap from "gsap";
 import { EVENTS } from "../data/events.js";
@@ -53,14 +56,20 @@ const LAT = { x: [-6, 6], y: [-6, 6], z: [-26, 6] };
 const VOID_R = 21;
 
 /* ─── each event is a cell of the tesseract, deeper and deeper along a twisting path ─── */
+/* horizon theme: the rooms are inside the black hole, on a spiral around its axis */
+const HORIZON = THEME === "horizon";
+const HOLE = V(6, -30, -260), HOLE_RS = 9, AXIS = V(0, -0.22, -1).normalize();
+const AX1 = V(1, 0, 0), AX2 = new THREE.Vector3().crossVectors(AXIS, AX1).normalize();
+const HELIX0 = 46, PITCH = 24, DEPTH = HELIX0 + (EVENTS.length - 1) * PITCH + 150;
 const cellAt = (i) => {
+  if (HORIZON) { const th = i * 1.05; return HOLE.clone().addScaledVector(AXIS, HELIX0 + i * PITCH).addScaledVector(AX1, Math.cos(th) * 11).addScaledVector(AX2, Math.sin(th) * 11); }
   const gx = Math.round(Math.sin(i * 1.3) * 1.2), gy = Math.round(Math.cos(i * 0.9));
   return V(CELL / 2 + gx * CELL, CELL / 2 + gy * CELL, -30 - i * 2 * CELL);
 };
 
 export const STOP = { hero: 0, trick: 1, descent: 2, ex0: 3, bottom: 3 + N, top: 4 + N };
 export const STOPS = STOP.top + 1;
-export const STOP_LABELS = ["The stair", "The trick", "Into the tesseract", ...EVENTS.map((e) => `Nº ${e.no} · ${e.short || e.title}`), "The far wall", "Back to the start"];
+export const STOP_LABELS = ["The stair", "The trick", THEME === "horizon" ? "Towards the horizon" : "Into the tesseract", ...EVENTS.map((e) => `Nº ${e.no} · ${e.short || e.title}`), THEME === "horizon" ? "The event horizon" : "The far wall", "Back to the start"];
 
 export class World {
   constructor(canvas) {
@@ -122,13 +131,26 @@ export class World {
 
     // (film now plays as the opening shot in the loader, not behind the stair)
     this._stairs();
-    this._lattice();
-    this._rooms();
+    this.theme = THEME;
+    const horizon = this.theme === "horizon";                       // deep space + black hole instead of the lattice
+    if (!horizon) { this._lattice(); this._rooms(); }
     this._cells();
-    this._tunnel();
+    if (!horizon) this._tunnel();
+    {  // the far wall. Tesseract theme: a true 4D hypercube. Horizon theme: the black hole you have been falling towards.
+      const last = cellAt(N - 1), p = last.clone().add(V(0, 2, -16)), dir = last.clone().add(V(0, -26, -90)).sub(p).normalize();
+      const tan = Math.tan(THREE.MathUtils.degToRad(13.5)), asp = innerWidth / innerHeight;
+      if (horizon) {
+        this.space = createSpace({ small: this.small, center: HOLE.clone(), Rs: HOLE_RS, axis: AXIS.clone(), depth: DEPTH });
+        scene.add(this.space.group);
+      } else {
+        this.hyper = createHypercube({ R: this.small ? 3.2 : 3.3, near: PAL.cyan, far: PAL.violet });
+        this.hyper.group.position.copy(p).addScaledVector(dir, 46).add(this.small ? V(0, 5.5, 0) : V(46 * tan * asp * 0.36, 1.0, 0));
+        scene.add(this.hyper.group);
+      }
+    }
+
     this._astronaut();
     this._rails();
-
     /* "Paradox", floating behind the stair */
     this.heroWord = new THREE.Mesh(new THREE.PlaneGeometry(30, 9.4), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, opacity: 0 }));
     this.heroWord.position.copy(VIEW).multiplyScalar(-18).add(V(0, 3.5, 0));
@@ -151,20 +173,28 @@ export class World {
     comp.addPass(new OutputPass());
     this.finish = new ShaderPass({
       defines: { TAPS: this.small ? 3 : 7 },   // the warp blur: fewer taps on phones
-      uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uAb: { value: 0.00025 }, uRes: { value: new THREE.Vector2(innerWidth, innerHeight) }, uFlash: { value: 0 }, uWarp: { value: 0 } },
+      uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uAb: { value: 0.00025 }, uRes: { value: new THREE.Vector2(innerWidth, innerHeight) }, uFlash: { value: 0 }, uWarp: { value: 0 }, uTrail: { value: Array.from({ length: 6 }, () => new THREE.Vector3(0.5, 0.5, 0)) }, uDark: { value: 0 }, uWhite: { value: 0 }, uHole: { value: new THREE.Vector3(0.5, 0.5, 0) } },
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-      fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime; uniform float uAb; uniform vec2 uRes; uniform float uFlash; uniform float uWarp; varying vec2 vUv;
+      fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime; uniform float uAb; uniform vec2 uRes; uniform float uFlash; uniform float uWarp; uniform vec3 uTrail[6]; uniform float uDark; uniform float uWhite; uniform vec3 uHole; varying vec2 vUv;
         float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
         vec3 tap(vec2 uv, vec2 o){ return vec3(texture2D(tDiffuse,uv+o).r, texture2D(tDiffuse,uv).g, texture2D(tDiffuse,uv-o).b); }
         void main(){ vec2 c=vUv-0.5; float d=length(c);
           vec2 uv=0.5+c*(1.0-uWarp*0.22*d*d);
-          vec2 o=c*(uAb+uFlash*0.008+uWarp*0.004)*(1.0+d*4.0);
+          vec2 bend=vec2(0.0); float lens=0.0; float asp=uRes.x/uRes.y;
+          for(int i=0;i<6;i++){ vec2 dd=vUv-uTrail[i].xy; vec2 da=vec2(dd.x*asp,dd.y); float wv=uTrail[i].z*exp(-dot(da,da)*70.0); bend+=dd*wv; lens+=wv; }
+          uv-=bend*0.3;
+          // horizon theme: your cursor is a pocket black hole — it lenses whatever is behind it (xy = position, z = radius in px)
+          float hr=uHole.z, hpx=1e6;
+          if(hr>0.5){ vec2 hd=vUv-uHole.xy; hpx=length(hd*uRes); uv-=hd*clamp(hr*hr*2.4/(hpx*hpx+hr*hr*0.3),0.0,3.0)*step(hpx,hr*9.0); }
+          vec2 o=c*(uAb+uFlash*0.008+uWarp*0.004)*(1.0+d*4.0)+bend*0.02;
           vec3 col=vec3(0.0); float tot=0.0;
           for(int i=0;i<TAPS;i++){ float k=float(i)/float(TAPS-1); float w=1.0-k*0.6; col+=tap(0.5+(uv-0.5)*(1.0-k*uWarp*0.07), o)*w; tot+=w; }
           col/=tot;
           col=mix(col, col*vec3(0.92,0.95,1.08)+vec3(0.006,0.004,0.02), 0.6);      // cool grade, indigo shadows
           col*=mix(1.0, 0.5, smoothstep(0.32, 0.95, d));
           col+=(h(vUv*uRes+fract(uTime)*97.0)-0.5)*0.04;
+          if(hr>0.5){ col*=smoothstep(hr*0.95,hr*1.1,hpx); col+=vec3(1.0,0.86,0.62)*exp(-pow((hpx-hr*1.2)/(hr*0.1),2.0))*0.85; }
+          col*=1.0-uDark; col=mix(col,vec3(1.0,0.97,0.9),uWhite);
           gl_FragColor=vec4(col,1.0); }`
     });
     comp.addPass(this.finish);
@@ -384,6 +414,7 @@ export class World {
 
   /* 16 tiles in one texture: your photos if MOMENTS has any, otherwise the event artwork */
   async _bakeMoments() {
+    if (!this.roomMat) return;                                      // horizon theme has no rooms to fill
     const TW = 512, TH = 384, c = document.createElement("canvas"); c.width = TW * 4; c.height = TH * 4;
     const x = c.getContext("2d");
     const load = (src) => new Promise((res) => { const im = new Image(); im.crossOrigin = "anonymous"; im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
@@ -497,8 +528,8 @@ export class World {
       const m = new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uPx: { value: this.dpr } },
         vertexShader: `attribute float aLife; uniform float uPx; varying float vL;
-          void main(){ vL=aLife; vec4 mv=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*mv; gl_PointSize=(aLife>0.0? (1.0-aLife)*90.0+18.0 : 0.0)*uPx/-mv.z; }`,
-        fragmentShader: `varying float vL; void main(){ if(vL<=0.0) discard; float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.0,d)*vL*vL*0.55; gl_FragColor=vec4(vec3(0.8,0.9,1.0)*a,a); }`
+          void main(){ vL=aLife; vec4 mv=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*mv; gl_PointSize=(aLife>0.0? (1.0-aLife)*46.0+10.0 : 0.0)*uPx/-mv.z; }`,
+        fragmentShader: `varying float vL; void main(){ if(vL<=0.0) discard; float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.0,d)*vL*vL*0.16; gl_FragColor=vec4(vec3(0.8,0.9,1.0)*a,a); }`
       });
       const pts = new THREE.Points(g, m); pts.frustumCulled = false; this.scene.add(pts);
       this.thr = { pos, life, vel: Array.from({ length: TN }, () => new THREE.Vector3()), g, i: 0, cool: 0 };
@@ -517,41 +548,27 @@ export class World {
       mesh.frustumCulled = false; mesh.visible = false; this.scene.add(mesh);
       this.tether = { P, R, mesh, g, pts: Array.from({ length: P }, () => new THREE.Vector3()), prev: Array.from({ length: P }, () => new THREE.Vector3()), seeded: false };
     }
-    new GLTFLoader().load("/models/astronaut.glb", (gltf) => {
-      const root = gltf.scene;
-      root.traverse((o) => {
-        if (!o.isMesh) return;
-        o.castShadow = true; o.frustumCulled = false;
-        const m = o.material; m.envMapIntensity = 1.1; this.astroMats.push(m);
-        // limbs trail the body's acceleration, the way loose limbs drift in zero-g
-        m.onBeforeCompile = (sh) => {
-          Object.assign(sh.uniforms, this.astroU);
-          sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform vec3 uDrag; uniform float uTime;")
-            .replace("#include <begin_vertex>", `#include <begin_vertex>
-  float legW = smoothstep(0.95, 0.05, position.y);
-  float armW = smoothstep(0.24, 0.52, abs(position.x)) * smoothstep(0.95, 1.2, position.y) * (1.0 - smoothstep(1.55, 1.75, position.y));
-  vec3 swing = -uDrag * (legW * legW * 0.2 + armW * 0.12);
-  swing.z += sin(uTime * 1.3 + sign(position.x) * 1.7) * 0.045 * legW * legW;      // slow, alternating leg drift
-  swing.x += sign(position.x) * sin(uTime * 0.9 + 0.6) * 0.03 * armW;              // arms float open and closed
-  transformed += swing;`);
-        };
-      });
+    // built in code (see Astronaut.js): jointed limbs, a detailed pack, a gold visor — no model file to download
+    {
+      const astro = (this.astroRig = createAstronaut({ accent: PAL.violet, glow: PAL.cyan }));
+      this.astroMats = astro.mats;
+      astro.mats.forEach((m) => (m.envMapIntensity = 0.8));
       const holder = new THREE.Group();
-      root.position.y = -1.0;                       // pivot at the body's centre of mass, not the boots
-      holder.add(root);
+      holder.add(astro.group);
       holder.scale.setScalar(0.82);
-      const rim = new THREE.PointLight(0x8fd8ff, 14, 8, 1.6); rim.position.set(-1.4, 1.4, -1.2); holder.add(rim);
-      const key = new THREE.PointLight(0xd8dcff, 6, 7, 1.8); key.position.set(1.2, 0.6, 1.6); holder.add(key);
+      const rim = new THREE.PointLight(0x8fd8ff, 3.2, 8, 1.6); rim.position.set(-1.4, 1.4, -1.2); holder.add(rim);
+      const key = new THREE.PointLight(0xd8dcff, 1.2, 7, 1.8); key.position.set(1.2, 0.6, 1.6); holder.add(key);
+      const back = new THREE.PointLight(0xbfc8ff, 1.6, 6, 1.8); back.position.set(0.4, 0.5, -2.2); holder.add(back);   // the pack faces the camera: light it
       this.scene.add(holder);
       this.astro = holder;
-    });
+    }
   }
   /* framing per part of the journey: how far ahead, and where on screen (right, up) */
   _astroFrame(s) {
     const K = [
       [0, 12, 2.5, -1.5],               // the stair: lower right, the stair stays the subject
       [STOP.trick, 10, 3.0, -1.6],
-      [STOP.descent, 6.5, 0.4, -0.8],   // the tunnel: dead centre, like the film
+      this.space ? [STOP.descent, 7.5, 1.9, -1.2] : [STOP.descent, 6.5, 0.4, -0.8],   // tunnel: dead centre, like the film — in space, off to the side so the hole stays in view
       [STOP.ex0, 7.5, -1.2, -1.6],      // the rooms: low left, the painting stays clear
       [STOP.bottom, 7, 0.2, -0.9],
       [STOP.top, 9, 2.4, -1.6]
@@ -566,7 +583,7 @@ export class World {
       const P = [
         [0, 15, 0.58, -0.45],             // below the stair, right of the hint text
         [STOP.trick, 13, 0.55, -0.45],
-        [STOP.descent, 8.5, 0.15, 0.3],   // above "11 rooms…"
+        this.space ? [STOP.descent, 9.5, 0.5, 0.42] : [STOP.descent, 8.5, 0.15, 0.3],   // above "11 rooms…"
         [STOP.ex0, 10, 0.74, 0.16],       // right edge, beside the painting, above the room panel
         [STOP.bottom, 9, 0.2, 0.62],      // over the big numbers' top margin
         [STOP.top, 10, 0.45, -0.5]        // under the closing call to action
@@ -619,12 +636,13 @@ export class World {
     const local = worldAcc.applyQuaternion(ap.q.clone().invert()).multiplyScalar(0.06);
     if (local.length() > 1) local.setLength(1);
     this.astroU.uDrag.value.lerp(local, 0.15); this.astroU.uTime.value = t;
+    this.astroRig.update(t, dt, this.astroU.uDrag.value);
 
     // thrusters fire against the correction, harder the harder he's being pushed
     const T = this.thr, push = ap.a.length();
     T.cool -= dt;
-    if (show && push > 3.5 && T.cool <= 0) {
-      T.cool = 0.03 + 0.12 / Math.min(push, 20);
+    if (show && push > 9 && T.cool <= 0) {          // only a real shove fires them — not drift, not mouse wobble
+      T.cool = 0.09 + 0.5 / Math.min(push, 30);
       const back = A.position.clone().addScaledVector(fwd, -0.32).addScaledVector(up, 0.12);
       const dir = worldAcc.clone().normalize().negate();
       for (let n = 0; n < 2; n++) {
@@ -647,8 +665,10 @@ export class World {
 
     // refresh the reflection probe every few frames
     if (this.cubeCam && show && A.visible && (this._cubeN = (this._cubeN || 0) + 1) % 10 === 0) {
-      if (!this._cubeBound) { this.astroMats.forEach((m) => { m.envMap = this.cubeRT.texture; m.envMapIntensity = 1.5; m.needsUpdate = true; }); this._cubeBound = true; }
+      if (!this._cubeBound) { this.astroMats.forEach((m) => { m.envMap = this.cubeRT.texture; m.envMapIntensity = 1.0; m.needsUpdate = true; }); this._cubeBound = true; }
+      if (this.space) this.space.sky.visible = false;                 // the trace is screen-space; it has no meaning on a cube face
       A.visible = false; this.cubeCam.position.copy(A.position); this.cubeCam.update(this.renderer, this.scene); A.visible = true;
+      if (this.space) this.space.sky.visible = true;
     }
   }
 
@@ -657,7 +677,7 @@ export class World {
     const { P, R, pts, prev } = Te, ap = this.ap;
     // ends, in camera space (right, up, ahead): his backpack, and a point just below and behind your view
     const a = ap.r.clone().add(V(0, 0.15 * this.astro.scale.x / 0.82, -0.3));
-    const b = innerWidth < innerHeight ? V(1.1, -0.9, 0.5) : V(0.9, -3.4, 0.4);   // phones: exit the side, not down through the text
+    const b = innerWidth < innerHeight ? V(1.5, -0.5, 3.0) : V(1.3, -1.9, 3.2);   // far enough from the lens that it never balloons   // phones: exit the side, not down through the text
     if (!Te.seeded) { for (let i = 0; i < P; i++) { const k = i / (P - 1); pts[i].lerpVectors(a, b, k).y -= Math.sin(k * Math.PI) * 1.2; prev[i].copy(pts[i]); } Te.seeded = true; }
     const len = a.distanceTo(b) * 1.22 / (P - 1);                      // ~20% slack: it sags and swings
     const h = Math.min(dt, 1 / 30), h2 = h * h;
@@ -683,7 +703,7 @@ export class World {
       if (!n) n = new THREE.Vector3().crossVectors(tg, up).normalize();
       n.sub(tg.clone().multiplyScalar(n.dot(tg))).normalize();
       const bn = new THREE.Vector3().crossVectors(tg, n);
-      const r = 0.028 * (i === 0 ? 1.6 : 1);
+      const r = 0.02 * (i === 0 ? 1.7 : 1);
       for (let j = 0; j < R; j++) {
         const th = (j / R) * Math.PI * 2, dx = n.clone().multiplyScalar(Math.cos(th)).addScaledVector(bn, Math.sin(th)), o = (i * R + j) * 3;
         pos[o] = W[i].x + dx.x * r; pos[o + 1] = W[i].y + dx.y * r; pos[o + 2] = W[i].z + dx.z * r;
@@ -731,8 +751,11 @@ export class World {
     push(C0.clone().applyAxisAngle(V(0, 1, 0), 0.6).multiplyScalar(0.85).add(V(0, -6, 0)), V(0, -0.5, 0));
     push(C0.clone().applyAxisAngle(V(0, 1, 0), 1.6).setY(0).setLength(38).setY(7), V(0, -1.5, 0), STOP.trick);
     push(V(16, 2, -16), V(6, 6, -30));
-    push(V(CELL / 2, CELL / 2 + 1, -14), V(CELL / 2, CELL / 2 - 1, -60), STOP.descent);
     let prev = V(CELL / 2, CELL / 2 + 1, -14);
+    if (HORIZON) {   // face the hole, skim in over the disk, and cross the horizon — the rooms are on the other side
+      push(V(6, 10, -14), HOLE.clone().add(this.small ? V(0, -16, 0) : V(-36, 16, 0)), STOP.descent);
+      prev = V(6, 10, -14);
+    } else push(V(CELL / 2, CELL / 2 + 1, -14), V(CELL / 2, CELL / 2 - 1, -60), STOP.descent);
     for (let i = 0; i < N; i++) {
       const c = cellAt(i), fp = this.focusPose(i, 1);
       // swoop between cells: a waypoint thrown off to the side, looking ahead into the next cell
@@ -741,7 +764,11 @@ export class World {
       prev = fp.p;
     }
     const last = cellAt(N - 1);
-    push(last.clone().add(V(0, 2, -16)), last.clone().add(V(0, -26, -90)), STOP.bottom);
+    if (HORIZON) {   // the far end: the singularity, then through it — and out where you began
+      const end = this.space.end;
+      push(HOLE.clone().addScaledVector(AXIS, HELIX0 + (N - 1) * PITCH + 34), end.clone().add(this.small ? V(0, 30, 0) : V(-36, 4, 0)), STOP.bottom);
+      push(end.clone(), end.clone().addScaledVector(AXIS, 40));
+    } else push(last.clone().add(V(0, 2, -16)), last.clone().add(V(0, -26, -90)), STOP.bottom);
     push(V(18, -10, 30), V(0, 0, 0));
     push(V(0.6, -17, 1.2), V(0, 8, 0.4), STOP.top);
     this.posCurve = new THREE.CatmullRomCurve3(keys.map((k) => k.p), false, "centripetal");
@@ -752,7 +779,7 @@ export class World {
   }
   /** Hang in front of cell i, having come from the previous one. side=+1 puts the cell right of centre. */
   focusPose(i, side = 1, wide = this.small) {
-    const c = cellAt(i), from = i ? cellAt(i - 1) : V(CELL / 2, CELL / 2, 0);
+    const c = cellAt(i), from = i ? cellAt(i - 1) : HORIZON ? HOLE.clone() : V(CELL / 2, CELL / 2, 0);
     const dir = c.clone().sub(from).normalize();
     const p = c.clone().addScaledVector(dir, wide && this.small ? -17 : -11.5).add(V(0, 0.8, 0));
     const fwd = c.clone().sub(p).normalize(), right = new THREE.Vector3().crossVectors(fwd, V(0, 1, 0)).normalize();
@@ -789,7 +816,7 @@ export class World {
       x.fillText(title, 62, 712);
       x.font = "500 20px 'DM Mono', monospace"; x.globalAlpha = 0.7;
       x.fillText(`${e.category.toUpperCase()}  ·  DAY ${String(e.slots[0].day).padStart(2, "0")}  ·  ${dayLabel(e.slots[0].day).toUpperCase()}`, 64, 828);
-      x.fillText(`${FEST.name.toUpperCase()} ’${FEST.edition.slice(2)}  ·  THE TESSERACT`, 64, 868); x.globalAlpha = 1;
+      x.fillText(`${FEST.name.toUpperCase()} ’${FEST.edition.slice(2)}  ·  ${HORIZON ? "THE HORIZON" : "THE TESSERACT"}`, 64, 868); x.globalAlpha = 1;
       // print finish: fine paper grain and a soft vignette
       const grain = x.getImageData(0, 0, 768, 960), gd = grain.data;
       for (let k = 0; k < gd.length; k += 4) { const n = (Math.random() - 0.5) * 14; gd[k] += n; gd[k + 1] += n; gd[k + 2] += n; }
@@ -940,16 +967,29 @@ export class World {
     }
     if (this.blend < 1 && this.from) fov = this.from.fov + (fov - this.from.fov) * smooth(this.blend) + Math.sin(Math.PI * this.blend) * 14; // lens punches wide mid-flight
     if (Math.abs(fov - cam.fov) > 0.001) { cam.fov = fov; cam.updateProjectionMatrix(); }
-    this.scene.fog.density = fog;
+    this.scene.fog.density = this.space ? fog * 0.3 : fog;          // space is clear; the lattice is hazy
     {
       const deep = clamp(-cam.position.z / 260);
       this._fogA ||= new THREE.Color(PAL.void); this._fogB ||= new THREE.Color(0x0a0b20); this._fogC ||= new THREE.Color(0x0e0c26);
       const col = this._fogA.clone().lerp(this._fogB, smooth(clamp(deep * 2))).lerp(this._fogC, smooth(clamp(deep * 2 - 1)));
       this.scene.fog.color.copy(col); this.scene.background.copy(col);
     }
-    this.beamU.uTime.value = t; this.beamU.uCam.value.copy(cam.position);
-    this.roomMat.uniforms.uTime.value = t; this.roomMat.uniforms.uFog.value = fog * 0.75;
-    this.strandMat.uniforms.uFog.value = fog * 0.8;
+    if (!this.space) {
+      this.beamU.uTime.value = t; this.beamU.uCam.value.copy(cam.position);
+      this.roomMat.uniforms.uTime.value = t; this.roomMat.uniforms.uFog.value = fog * 0.75;
+      this.strandMat.uniforms.uFog.value = fog * 0.8;
+    } else {
+      // how far you have fallen, 0…1: by route progress on the journey, by position elsewhere (a painting's own page, the gallery)
+      const journey = this.mode.type === "journey";
+      const fall = journey ? Math.max(0, (this.sCur - (STOP.descent + 0.45)) / (STOP.bottom - STOP.descent - 0.45)) : -1;   // past 1 = the plunge
+      this.space.update(t, cam, heroW, this.renderer, fall, journey ? clamp((this.sCur - STOP.descent) / 0.6) : -1);
+      // at the very end the hole takes the last of the light, then the singularity gives it all back at once
+      this.finish.uniforms.uDark.value += (this.space.dark - this.finish.uniforms.uDark.value) * 0.2;
+      this.finish.uniforms.uWhite.value += (this.space.white - this.finish.uniforms.uWhite.value) * 0.25;
+      for (const c of this.cells) c.holder.visible = this.space.falling;   // the rooms are stops on the way down
+      // how much slower your clock runs than one far away — exact for where you are: 1/sqrt(1 − Rs/r)
+      this.info.dilation = !journey || this.sCur < 1.6 || this.sCur > STOP.bottom + 0.5 ? 0 : this.space.r > 1.0005 ? 1 / Math.sqrt(1 - 1 / this.space.r) : Infinity;
+    }
     this.lantern.position.copy(cam.position).addScaledVector(fwd, 2);
     if (this.film) {
       const vis = this.mode.type === "journey" ? clamp(1 - this.sCur * 0.9) : this.mode.type === "ambient" && (this.mode.place === "orbit" || this.mode.place === "top") ? 0.55 : 0;
@@ -970,8 +1010,7 @@ export class World {
     this.heroWord.material.opacity = 0.9 * wordVis * this.wordIn;
     this.heroWord.lookAt(cam.position);
 
-    this.dust.uniforms.uTime.value = t;
-    this.strandMat.uniforms.uTime.value = t;
+    if (!this.space) { this.dust.uniforms.uTime.value = t; this.strandMat.uniforms.uTime.value = t; }
     this.finish.uniforms.uTime.value = t;
 
     // you: the astronaut, physics-driven, just ahead of the camera
@@ -979,8 +1018,10 @@ export class World {
       // his frame is the camera's real one — including roll, or he hangs upside down when the shot rolls
       const q = cam.quaternion, cF = V(0, 0, -1).applyQuaternion(q), cR = V(1, 0, 0).applyQuaternion(q), cU = V(0, 1, 0).applyQuaternion(q);
       this._astroTick(t, dt, cam, cF, cR, cU); }
-    this.tunnelMat.uniforms.uTime.value = t; this.tunnelMat.uniforms.uFog.value = fog;
-    this.beamMat.uniforms.uTime.value = t; this.beamMat.uniforms.uFog.value = fog;
+    if (!this.space) {
+      this.tunnelMat.uniforms.uTime.value = t; this.tunnelMat.uniforms.uFog.value = fog;
+      this.beamMat.uniforms.uTime.value = t; this.beamMat.uniforms.uFog.value = fog;
+    }
     // hover on cells
     let hov = -1;
     const pickable = this.fine && ((this.mode.type === "journey" && this.sCur > STOP.ex0 - 0.6 && this.sCur < STOP.ex0 + N - 0.4) || (this.mode.type === "ambient" && this.mode.place === "gallery"));
@@ -1006,7 +1047,7 @@ export class World {
       const turning = c.face * (1 - c.face) * 4;
       c.thread.material.opacity = 0.35 + turning * 0.9 + c.hover * 0.3;
       c.g.scale.setScalar(1 + c.hover * 0.04);
-      c.halo.material.opacity = 0.35 + c.face * 0.35 + c.hover * 0.2;
+      c.halo.material.opacity = (0.35 + c.face * 0.35 + c.hover * 0.2) * (HORIZON ? 0.12 : 1);   // in space the hole behind it should stay black
       c.echoes.forEach((m, k) => (m.position.z = -(k + 1) * (2.4 + c.face * 1.6)));
     });
 
@@ -1021,6 +1062,26 @@ export class World {
     const w = this.reduce ? 0 : Math.min(0.6, speed * 0.5 + this.kick * Math.sin(Math.PI * (1 - this.kick)) * 0.8);
     this.finish.uniforms.uWarp.value += (w - this.finish.uniforms.uWarp.value) * 0.15;
 
+    {  // the tesseract wakes as you go deeper, spins up with your speed, and lets go as you fly back out
+      const now = performance.now() / 1000, hdt = Math.min(0.05, now - (this._hT ?? now)); this._hT = now;
+      let g = clamp((-cam.position.z - 14) / 40);
+      if (this.mode.type === "journey") g *= clamp((STOP.bottom + 0.75 - this.sCur) / 0.5);
+      this._hG = (this._hG ?? 0) + (g - (this._hG ?? 0)) * 0.08;
+      this.hyper?.update(hdt, 1 + Math.min(6, speed * 9), this._hG);
+    }
+    {  // space bends in your cursor's wake: a short trail of lens points, each fading out
+      const tr = this.finish.uniforms.uTrail.value, n = this.mouse.ndc;
+      if (this.fine && !this.reduce && n.x < 5) {
+        const u = (n.x + 1) / 2, v = (n.y + 1) / 2, sp = Math.hypot(u - (this._tu ?? u), v - (this._tv ?? v));
+        if (sp > 0.006) { const h = tr.pop(); h.set(u, v, Math.min(1, sp * 16)); tr.unshift(h); this._tu = u; this._tv = v; }
+      }
+      for (const pnt of tr) pnt.z *= 0.95;
+      if (this.space && this.fine && !this.reduce && n.x < 5) {            // the pocket black hole follows the pointer, with a little weight
+        const h = this.finish.uniforms.uHole.value;
+        h.x += ((n.x + 1) / 2 - h.x) * 0.3; h.y += ((n.y + 1) / 2 - h.y) * 0.3; h.z += (15 - h.z) * 0.08;
+      }
+    }
+
     if (this.bokeh) {
       const fd = this.mode.type === "journey" && this.astro?.visible ? cam.position.distanceTo(this.astro.position) : this.mode.type === "focus" ? 11.5 : 30;
       const u = this.bokeh.uniforms; u.focus.value += (fd - u.focus.value) * 0.1;
@@ -1029,6 +1090,22 @@ export class World {
     if (this.mode.type === "journey") {
       const idx = Math.round(this.sCur - STOP.ex0);
       if (idx >= 0 && idx < N && idx !== this._passIdx && Math.abs(this.sCur - (STOP.ex0 + idx)) < 0.45) { if (this._passIdx !== undefined) sound.whoosh?.(idx % 2 ? -0.7 : 0.7); this._passIdx = idx; }
+    }
+    {  // keep it smooth on any machine: if frames run long for a couple of seconds, render fewer pixels (never the other way, so it cannot flicker)
+      const now = performance.now(), dtG = now - (this._gLast ?? now); this._gLast = now; this._gStart ??= now;
+      if (dtG < 120 && !document.hidden && now - this._gStart > 7000) {
+        this._ft = (this._ft ?? 16) * 0.94 + dtG * 0.06; this._gAcc = (this._gAcc ?? 0) + dtG;
+        if (this._gAcc > 2200) {
+          this._gAcc = 0;
+          if (this._ft > 23 && (this.q ?? 3) > 0) {
+            this.q = (this.q ?? 3) - 1;
+            const pr = this.dpr * [0.5, 0.64, 0.8, 1][this.q];
+            this.renderer.setPixelRatio(pr); this.composer.setPixelRatio(pr); this.composer.setSize(innerWidth, innerHeight);
+            if (this.ao && this.q < 2) this.ao.enabled = false;
+            this._ft = 16;
+          }
+        }
+      }
     }
     this.composer.render();
   }

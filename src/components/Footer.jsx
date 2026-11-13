@@ -31,7 +31,7 @@ export default function Footer() {
       </div>
       <div className="footer__word" aria-hidden="true">{FEST.name}</div>
       <div className="footer__bottom mono">
-        <span>© {FEST.edition} {FEST.name}, formerly {FEST.formerly}. Built by the technical team. Astronaut model: Poly by Google, CC-BY.</span>
+        <span>© {FEST.edition} {FEST.name}, formerly {FEST.formerly}. Built by the technical team.</span>
         <button className="footer__top" onClick={() => lenis.scrollTo(0, { duration: 2.2 })}>Back to the surface ↑</button>
       </div>
     </footer>

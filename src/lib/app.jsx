@@ -4,6 +4,12 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import { World } from "../world/World.js";
+import { FOLD } from "../components/Curtain.jsx";
+
+/* where the last press landed: page transitions fold outward from it */
+const press = { x: innerWidth / 2, y: innerHeight / 2 };
+addEventListener("pointerdown", (e) => { press.x = e.clientX; press.y = e.clientY; }, true);
+const foldFrom = () => Math.min(FOLD.rows - 1, Math.floor((press.y / innerHeight) * FOLD.rows)) * FOLD.cols + Math.min(FOLD.cols - 1, Math.floor((press.x / innerWidth) * FOLD.cols));
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -59,8 +65,9 @@ export function AppProvider({ children }) {
     el.querySelector("[data-curtain-path]").textContent = path === "/" ? "/ home" : path;
     gsap.timeline({ onComplete: () => { navigate(to); } })
       .set(el, { visibility: "visible" })
-      .fromTo(el.querySelectorAll(".shard"), { xPercent: (i) => (i % 2 ? 115 : -115) }, { xPercent: 0, duration: 0.75, ease: "expo.inOut", stagger: 0.07 })
-      .fromTo(el.querySelectorAll("[data-curtain-line]"), { yPercent: 110 }, { yPercent: 0, duration: 0.6, ease: "expo.out", stagger: 0.05 }, "-=0.25");
+      .fromTo(el.querySelectorAll(".fold__cell"), { rotateX: -96, opacity: 0, scale: 0.8 },
+        { rotateX: 0, opacity: 1, scale: 1.015, duration: 0.5, ease: "power3.out", stagger: { grid: [FOLD.rows, FOLD.cols], from: foldFrom(), amount: 0.4 } })
+      .fromTo(el.querySelectorAll("[data-curtain-line]"), { yPercent: 110 }, { yPercent: 0, duration: 0.55, ease: "expo.out", stagger: 0.05 }, "-=0.3");
   }, [location.pathname, location.search, navigate]);
 
   // after every route change: restore (Back/Forward) or jump to top, refresh scroll maths, lift the curtain
@@ -79,7 +86,7 @@ export function AppProvider({ children }) {
       viaCurtain.current = false;
       gsap.timeline({ delay: 0.15, onComplete: () => { busy.current = false; gsap.set(el, { visibility: "hidden" }); } })
         .to(el.querySelectorAll("[data-curtain-line]"), { yPercent: -110, duration: 0.45, ease: "power3.in", stagger: 0.04 })
-        .to(el.querySelectorAll(".shard"), { xPercent: (i) => (i % 2 ? -115 : 115), duration: 0.85, ease: "expo.inOut", stagger: 0.07 }, "-=0.15");
+        .to(el.querySelectorAll(".fold__cell"), { rotateX: 96, opacity: 0, scale: 0.8, duration: 0.55, ease: "power3.in", stagger: { grid: [FOLD.rows, FOLD.cols], from: "center", amount: 0.38 } }, "-=0.2");
     } else gsap.set(el, { visibility: "hidden" });
   }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
